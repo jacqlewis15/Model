@@ -15,6 +15,7 @@ from Tkinter import *
 import Tkinter, Tkconstants, tkFileDialog
 import os
 import subprocess
+import xlsxwriter
 
 
 # File I/O functions, from 15-112
@@ -495,7 +496,7 @@ def mousePressed(event, data):
     # checks if the bottom button is clicked on
     if event.x > left+bwidth/2 and event.x < right+bwidth/2:
         if index == 23: 
-            mix(data,"output")
+            mix(data)
             data.complete = True
 
     if event.x > left and event.x < right+bwidth:
@@ -680,14 +681,29 @@ def makeOutput(data,atoms,file="new"):
     comContents = addHeader(file,res,data.header)
     # places both files into their specific folder
     makeFolder(file)
-    xyzFileName = file + "/" + trimFileName(file) + ".xyz"
-    comFileName = file + "/" + trimFileName(file) + ".com"
+    makeFolder(file + "/Analytical_" + trimFileName(file))
+    expFolder = file + "/Exp_" + trimFileName(file)
+    makeFolder(expFolder)
+    workbook = xlsxwriter.Workbook(expFolder + "/Exp_" + trimFileName(file) + ".xlsx")
+    worksheet = workbook.add_worksheet()
+    bold = workbook.add_format({'bold': True})
+    worksheet.write('A1','Exp',bold)
+    worksheet.write('B1','Type',bold)
+    worksheet.write('C1','Well',bold)
+    workbook.close()
+    makeFolder(file + "/munye_" + trimFileName(file))
+    makeFolder(file + "/kubili_" + trimFileName(file))
+    makeFolder(file + "/kutsatfu_" + trimFileName(file))
+    gaussFolder = file + "/Gauss_" + trimFileName(file)
+    makeFolder(gaussFolder)
+    xyzFileName = gaussFolder + "/" + trimFileName(file) + ".xyz"
+    comFileName = gaussFolder + "/" + trimFileName(file) + ".com"
     writeFile(xyzFileName,xyzStart+res)
     writeFile(comFileName,comContents)
 
 # This function creates all possible combinations of NN and CN complexes 
 # entered and produces the output files for each pairing.
-def mix(data,folder="output"):
+def mix(data):
     # gets the specific coordinates of the iridium coordinating atoms
     coord,IrCoord = iridiumCoordinates(),(-0.94992,0,0)
     CNs,NNs = [],[]
@@ -700,7 +716,7 @@ def mix(data,folder="output"):
     # creates output files for all pairings
     for (file1,CN1,CN2) in CNs:
         for (file2,NN) in NNs:
-            path = folder+"/"+"Ir_CN"+trimFileName(file2)+"_2_NN"+trimFileName(file1)
+            path = data.folder+"/"+"Ir_"+trimFileName(file2)+"_2_"+trimFileName(file1)
             makeOutput(data,joinComplex((NN,CN1,CN2),IrCoord),path)
 
 # This function draws the grid elements for the CN and NN inputs, as well as
