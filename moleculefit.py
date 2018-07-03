@@ -203,39 +203,89 @@ class Ligand(Complex):
 
         # calculates starting and ending position
         plane = Plane((p1,p2,c),"points")
-        orig1,orig2 = self.pivots[0].p,self.pivots[1].p
+        orig1,orig2,orig3 = self.pivots[0].p,self.pivots[1].p,self.pivots[2].p
         origPlane = Plane((self.pivots[0].p,self.pivots[1].p,self.pivots[2].p),"points")
         p1,p2 = updatePoints((p1,p2),(self.pivots[0].p,self.pivots[1].p))
         upper = []
         
-        # moves each atom to its equivalent position to the new plane
-        for atom in self.atoms:
+        for atom in self.pivots:
             if atom == self.pivots[0]: atom.update(p1)
-            elif atom == self.pivots[1]: atom.update(p2)
-            elif not origPlane.onPlane(atom.p):
-                atom.rotate(origPlane,plane,(orig1,orig2),(p1,p2))
-            else:
-                orthPlane = origPlane.orthPlane(orig1,orig2)
-                # atoms above the orthogonal plane sometimes are placed 
-                # on the wrong side of the new orthogonal plane and must
-                # be fixed
-                if orthPlane.above(atom.p): 
-                    dist = orthPlane.distToPlane(atom.p)
-                    upper.append((atom,dist))
+            elif atom == self.pivots[1]: 
+                atom.update(p2)
+                newOrthPlane = plane.orthPlane(self.pivots[0].p,self.pivots[1].p)
+            else: 
                 atom.update(plane.findPlace(p1,p2,
                     distance(atom.p,orig1),distance(atom.p,orig2)))
+                if distance(self.pivots[2].p,c) < distance(self.pivots[0].p,c):
+                    dist = newOrthPlane.distToPlane(atom.p)
+                    atom.update(newOrthPlane.travel(atom.p,2*dist,1))
+
+        p3 = self.pivots[2].p
+
+        # moves each atom to its equivalent position to the new plane
+        for atom in self.atoms:
+            if atom in self.pivots: continue
+            elif not origPlane.onPlane(atom.p):
+                oDist = [distance(atom.p,orig1),distance(atom.p,orig2),
+                    distance(atom.p,orig3)]
+                atom.rotate(origPlane,plane,(orig1,orig2),(p1,p2))
+                dist = newOrthPlane.distToPlane(atom.p)
+                test = [0]*3
+                test[0] = atom.p
+                test[1] = newOrthPlane.travel(test[0],2*dist,1)
+                test[2] = newOrthPlane.travel(test[0],2*dist,-1)
+                res = []
+                for p in test:
+                    res.append(residual(p,oDist,(p1,p2,p3)))
+                atom.update(test[res.index(min(res))])
+            else:
+                # orthPlane = origPlane.orthPlane(orig1,orig2)
+                # # atoms above the orthogonal plane sometimes are placed 
+                # # on the wrong side of the new orthogonal plane and must
+                # # be fixed
+                # if orthPlane.above(atom.p): 
+                #     dist = orthPlane.distToPlane(atom.p)
+                #     upper.append((atom,dist))
+                oDist = [distance(atom.p,orig1),distance(atom.p,orig2),
+                    distance(atom.p,orig3)]
+                test = [0]*3
+                test[0] = plane.findPlace(p1,p2,
+                    distance(atom.p,orig1),distance(atom.p,orig2))
+                dist = newOrthPlane.distToPlane(test[0])
+                test[1] = newOrthPlane.travel(test[0],2*dist,1)
+                test[2] = newOrthPlane.travel(test[0],2*dist,-1)
+                res = []
+                for p in test:
+                    res.append(residual(p,oDist,(p1,p2,p3)))
+                atom.update(test[res.index(min(res))])
+
+                # compare residuals and then choose closest point
+                # maybe this will work????
+
+                # if not eq(distance(atom.p,p3),pivotDist):
+                #     dist = newOrthPlane.distToPlane(atom.p)
+                #     atom.update(newOrthPlane.travel(atom.p,2*dist,1))
+                #     if distance(atom.p,p3) > pivotDist:
+                #         atom.update(newOrthPlane.travel(atom.p,4*dist,-1))
+
+def residual(p,oDist,points):
+    p1,p2,p3 = points
+    res = (distance(p,p1)-oDist[0])**2
+    res += (distance(p,p2)-oDist[1])**2
+    res += (distance(p,p3)-oDist[2])**2
+    return res
         
         # determines if the complex sits in the correct position relative 
         # to the center
-        newOrthPlane = plane.orthPlane(self.pivots[0].p,self.pivots[1].p)
-        if distance(self.pivots[2].p,c) < distance(self.pivots[0].p,c):
-            self.flip(newOrthPlane)
+        # newOrthPlane = plane.orthPlane(self.pivots[0].p,self.pivots[1].p)
+        # if distance(self.pivots[2].p,c) < distance(self.pivots[0].p,c):
+        #     self.flip(newOrthPlane)
         
-        # fixes the above plane atoms to be in the correct position
-        for (atom,dist) in upper:
-            atom.update(newOrthPlane.travel(atom.p,2*dist,1))
-            if newOrthPlane.distToPlane(atom.p) > dist:
-                atom.update(newOrthPlane.travel(atom.p,4*dist,-1))
+        # # fixes the above plane atoms to be in the correct position
+        # for (atom,dist) in upper:
+        #     atom.update(newOrthPlane.travel(atom.p,2*dist,1))
+        #     if newOrthPlane.distToPlane(atom.p) > dist:
+        #         atom.update(newOrthPlane.travel(atom.p,4*dist,-1))
 
 
 # This class defines a plane and its uses in translating points. The
@@ -442,7 +492,7 @@ def init(data):
 
     data.CNfiles = [""]*16
     data.NNfiles = [""]*16
-    data.complete = False
+    data.complete = ""
     data.output = "output"
     data.header = getDefault()
 
@@ -486,18 +536,18 @@ def mousePressed(event, data):
     # checks if the left column is clicked on
     if event.x > left and event.x < left+bwidth:
         if index > 8 and index < 22: 
-            data.complete = False
+            data.complete = ""
             fileExplorer(data,data.CNfiles,index)
     # checks if the right column is clicked on
     if event.x > right and event.x < right+bwidth:
         if index > 8 and index < 22: 
-            data.complete = False
+            data.complete = ""
             fileExplorer(data,data.NNfiles,index)
     # checks if the bottom button is clicked on
     if event.x > left+bwidth/2 and event.x < right+bwidth/2:
         if index == 23: 
             mix(data)
-            data.complete = True
+            data.complete = "Complete"
 
     if event.x > left and event.x < right+bwidth:
         # checks if the top button is clicked on
@@ -716,7 +766,7 @@ def mix(data):
     # creates output files for all pairings
     for (file1,CN1,CN2) in CNs:
         for (file2,NN) in NNs:
-            path = data.folder+"/"+"Ir_"+trimFileName(file2)+"_2_"+trimFileName(file1)
+            path = data.folder+"/"+"Ir_"+trimFileName(file1)+"_2_"+trimFileName(file2)
             makeOutput(data,joinComplex((NN,CN1,CN2),IrCoord),path)
 
 # This function draws the grid elements for the CN and NN inputs, as well as
@@ -737,7 +787,7 @@ def drawTable(canvas, data):
     canvas.create_rectangle(left+bwidth/2,24*bheight,right+bwidth/2,25*bheight,fill="white")
     canvas.create_text(center,24.5*bheight,text="Compute",font="Arial 20 bold")
     # computation is complete notification
-    if data.complete: canvas.create_text(center,25.5*bheight,text="Complete",font="Arial 20 bold")
+    canvas.create_text(center,25.5*bheight,text=data.complete,font="Arial 20 bold")
     
 # This function draws the folder and header editing locations and progress.
 def drawInput(canvas, data):
